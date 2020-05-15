@@ -56,9 +56,13 @@ public void currentVideoPlay(String preloadBusId, String url)
             Log.d(PreloadManager.TAG, url + " has a cache");
     }
     
-    PreloadManager.getInstance().currentVideoPlay(mParams.preloadBusId, mParams.mVideoId);
+    // 参数preloadBusId和VideoPreLoadFuture初始化的VideoPreLoadFuture保持一致，url为当前短视频播放地址
+    PreloadManager.getInstance().currentVideoPlay(preloadBusId, url);
   }
 ```
 
 很简单的几步就可以完成短视频数据的预加载，而且也完美的配合AndroidVideoCache的能力
+
+#### 看个demo录屏
+
 
