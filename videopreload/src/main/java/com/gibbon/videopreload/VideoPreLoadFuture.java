@@ -1,15 +1,16 @@
 package com.gibbon.videopreload;
 
 import android.app.Application;
-import android.arch.lifecycle.Lifecycle;
-import android.arch.lifecycle.LifecycleObserver;
-import android.arch.lifecycle.LifecycleOwner;
-import android.arch.lifecycle.OnLifecycleEvent;
 import android.content.Context;
 import android.os.Handler;
 import android.os.Message;
 import android.text.TextUtils;
 import android.util.Log;
+
+import androidx.lifecycle.Lifecycle;
+import androidx.lifecycle.LifecycleObserver;
+import androidx.lifecycle.LifecycleOwner;
+import androidx.lifecycle.OnLifecycleEvent;
 
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
@@ -37,12 +38,14 @@ public class VideoPreLoadFuture implements LifecycleObserver {
     private ExecutorService mExecutorService = Executors.newCachedThreadPool();
     private ConsumerThread mConsumerThread;
     private CurrentLoadingHandler mHandler;
+    private Context mContext;
 
     /**
      * @param context
      * @param preloadBusId 每个页面对应一个busId
      * */
     public VideoPreLoadFuture(Context context, String preloadBusId) {
+        mContext = context;
         mHandler = new CurrentLoadingHandler(this);
 
         if (context instanceof Application) {
@@ -138,7 +141,7 @@ public class VideoPreLoadFuture implements LifecycleObserver {
     @OnLifecycleEvent(Lifecycle.Event.ON_DESTROY)
     public void onDestroy() {
         Log.d(PreLoadManager.TAG, "onDestroy: ");
-        PreLoadManager.getInstance().removeFuture(mBusId);
+        PreLoadManager.getInstance(mContext).removeFuture(mBusId);
         /**
          * 关闭线程
          * */
@@ -230,7 +233,7 @@ public class VideoPreLoadFuture implements LifecycleObserver {
                         if (TextUtils.isEmpty(url)) {
                             continue;
                         }
-                        preLoadTask = PreLoadManager.getInstance().createTask(mBusId, url, i);
+                        preLoadTask = PreLoadManager.getInstance(mContext).createTask(mBusId, url, i);
                         if (!mLoadingTaskDeque.contains(preLoadTask)) {
                             if (mLoadingTaskDeque.size() >= 16) {
                                 PreLoadTask ingPreLoadTask = mLoadingTaskDeque.pollLast();
