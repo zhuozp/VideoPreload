@@ -68,4 +68,4 @@ public void currentVideoPlay(String preloadBusId, String url)
 ![示例](https://github.com/zhuozp/VideoPreload/blob/master/images/device-2020-05-15-170554.gif)
 
 #### 点个start
-觉得不错的话还请点个赞呗，后续根据线上情况会进行优化迭代
+觉得不错的话还请点个赞呗，接下来将对不同网络环境下预加载的处理以及根据线上环境，来进一步优化预加载的逻辑
