@@ -64,7 +64,7 @@ public void currentVideoPlay(String preloadBusId, String url)
 很简单的几步就可以完成短视频数据的预加载，而且也完美的配合AndroidVideoCache的能力
 
 #### 实现原理
-![示例](https://github.com/zhuozp/VideoPreload/blob/master/images/preload.jpg）
+![image](https://github.com/zhuozp/VideoPreload/blob/master/images/preload.jpg)
 
 #### 看个demo录屏
 
