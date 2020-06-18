@@ -1,7 +1,12 @@
 package com.gibbon.videopreload;
 
 import android.app.Application;
+import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
+import android.net.ConnectivityManager;
+import android.net.NetworkInfo;
 import android.os.Handler;
 import android.os.Message;
 import android.text.TextUtils;
@@ -11,6 +16,9 @@ import androidx.lifecycle.Lifecycle;
 import androidx.lifecycle.LifecycleObserver;
 import androidx.lifecycle.LifecycleOwner;
 import androidx.lifecycle.OnLifecycleEvent;
+
+import com.gibbon.videopreload.adapter.DefaultNetworkAdapter;
+import com.gibbon.videopreload.adapter.INetworkAdapter;
 
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
@@ -34,11 +42,15 @@ public class VideoPreLoadFuture implements LifecycleObserver {
     private volatile boolean toPreLoad = false;
     private ReentrantLock mLock = new ReentrantLock();
     private Condition empty = mLock.newCondition();
+    private Condition network = mLock.newCondition();
     private LinkedBlockingDeque<PreLoadTask> mLoadingTaskDeque = new LinkedBlockingDeque<>();
     private ExecutorService mExecutorService = Executors.newCachedThreadPool();
     private ConsumerThread mConsumerThread;
     private CurrentLoadingHandler mHandler;
     private Context mContext;
+    private INetworkAdapter mNetworkAdapter;
+    private BroadcastReceiver mNetworkReceiver;
+    private volatile boolean mIsWifi = false;
 
     /**
      * @param context
@@ -64,8 +76,26 @@ public class VideoPreLoadFuture implements LifecycleObserver {
 
         PreLoadManager.getInstance(context).putFuture(mBusId, this);
 
+        setNetworkAdapter(new DefaultNetworkAdapter());
+
+        if (mNetworkReceiver == null) {
+            mNetworkReceiver = new NetworkBroadcastReceiver();
+        }
+
+        if (mContext != null) {
+            try {
+                mContext.registerReceiver(mNetworkReceiver, new IntentFilter(ConnectivityManager.CONNECTIVITY_ACTION));
+            } catch (Exception e) {
+                Log.e(PreLoadManager.TAG, this + "\tregisterReceiver exp:" + e);
+            }
+        }
+
         mConsumerThread = new ConsumerThread();
         mConsumerThread.start();
+    }
+
+    public void setNetworkAdapter(INetworkAdapter networkAdapter) {
+        mNetworkAdapter = networkAdapter;
     }
 
     public void addUrls(List<String> urls) {
@@ -103,6 +133,17 @@ public class VideoPreLoadFuture implements LifecycleObserver {
          * 线程进入阻塞
          * */
         Log.d(PreLoadManager.TAG, "onPause: ");
+
+        if (mNetworkReceiver != null) {
+            try {
+                if (mContext != null) {
+                    mContext.unregisterReceiver(mNetworkReceiver);
+                }
+            } catch (Exception e) {
+                Log.e(PreLoadManager.TAG, this + "\tunregisterReceiver exp:" + e);
+            }
+        }
+
         mLock.lock();
         hasPause = true;
         try {
@@ -123,6 +164,19 @@ public class VideoPreLoadFuture implements LifecycleObserver {
          * 唤醒进入阻塞的线程
          * */
         Log.d(PreLoadManager.TAG, "onResume: ");
+
+        if (mNetworkReceiver == null) {
+            mNetworkReceiver = new NetworkBroadcastReceiver();
+        }
+
+        if (mContext != null) {
+            try {
+                mContext.registerReceiver(mNetworkReceiver, new IntentFilter(ConnectivityManager.CONNECTIVITY_ACTION));
+            } catch (Exception e) {
+                Log.e(PreLoadManager.TAG, this + "\tregisterReceiver exp:" + e);
+            }
+        }
+
         mLock.lock();
         try {
             if (hasPause && !TextUtils.isEmpty(mCurrentUrl)) {
@@ -199,6 +253,16 @@ public class VideoPreLoadFuture implements LifecycleObserver {
         }
     }
 
+    private boolean isNetWorkConnect() {
+        if (mContext == null) {
+            return false;
+        }
+        ConnectivityManager cm = (ConnectivityManager) mContext.getSystemService(Context.CONNECTIVITY_SERVICE);
+        NetworkInfo netInfo = cm.getActiveNetworkInfo();
+        boolean isConnect = (netInfo != null && netInfo.isConnected());
+        return isConnect;
+    }
+
     class ConsumerThread extends Thread {
 
         @Override
@@ -206,6 +270,11 @@ public class VideoPreLoadFuture implements LifecycleObserver {
             mLock.lock();
             try {
                 while (!isInterrupted()) {
+                    if (!isNetWorkConnect() || (!mIsWifi && !mNetworkAdapter.canPreLoadIfNotWifi())) {
+                        Log.d(PreLoadManager.TAG, "ConsumerThread is await for" + (isNetWorkConnect() ? " is not wifi " : " network not connect"));
+                        network.await();
+                    }
+
                     if (!toPreLoad) {
                         Log.d(PreLoadManager.TAG, "ConsumerThread is await");
                         empty.await();
@@ -268,6 +337,32 @@ public class VideoPreLoadFuture implements LifecycleObserver {
             Log.d(PreLoadManager.TAG, "removeTask " + (flag ? "success" : "fail"));
         } finally {
             mLock.unlock();
+        }
+    }
+
+    public class NetworkBroadcastReceiver extends BroadcastReceiver {
+
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            ConnectivityManager cm = (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
+            NetworkInfo netInfo = cm.getActiveNetworkInfo();
+            boolean isConnect = (netInfo != null && netInfo.isConnected());
+            if (isConnect) {
+                int networkType = netInfo.getType();
+                if (networkType == ConnectivityManager.TYPE_WIFI) {
+                    mLock.lock();
+                    try {
+                        mIsWifi = true;
+                        network.signal();
+                    } finally {
+                        mLock.unlock();
+                    }
+                } else {
+                    mIsWifi = false;
+                }
+            } else {
+                mIsWifi = false;
+            }
         }
     }
 
